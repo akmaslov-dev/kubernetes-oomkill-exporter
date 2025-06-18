@@ -1,0 +1,74 @@
+name: Release
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  Release:
+    name: Release Workflow
+    runs-on: ubuntu-latest
+    permissions:
+      # write permission is required to create a github release
+      contents: write
+      pull-requests: write
+      id-token: write  # needed for cosign keyless signing with OIDC
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize GCP Cloud SDK
+        uses: 'google-github-actions/auth@v2'
+        with:
+          project_id: 'qdrant-cloud'
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Setup Docker Artifact Registry
+        run: |
+         gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+      - name: Set Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            us-docker.pkg.dev/qdrant-cloud/docker/k8s-oomkill-exporter
+          tags: |
+            type=raw,value=latest
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v6
+        id: build-and-push
+        with:
+          context: .
+          push: true
+          sbom: true
+          provenance: true
+          platforms: linux/amd64,linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          secrets: |
+            "github_token=${{ secrets.GH_REPO_READ_TOKEN }}"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.8.0
+
+      - name: Sign container image
+        run: |
+          cosign sign --yes "${TAGS}@${DIGEST}"
+        env:
+          TAGS: us-docker.pkg.dev/qdrant-cloud/docker/k8s-oomkill-exporter:latest
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+

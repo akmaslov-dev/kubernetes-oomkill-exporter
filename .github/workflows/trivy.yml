@@ -1,0 +1,35 @@
+name: Trivy Docker Security Scan
+"on":
+  push:
+    branches:
+      - master
+ 
+permissions:
+  contents: write
+  id-token: write 
+  actions: write
+  security-events: write
+jobs:
+  docker_security_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+       
+      - name: Build Docker image
+        run: |
+          docker build -t k8s-oomkill-exporter:latest .
+       
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: 'k8s-oomkill-exporter:latest'
+          format: 'sarif'
+          exit-code: 0
+          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+          output: 'trivy-results.sarif'
+ 
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+            sarif_file: 'trivy-results.sarif'
