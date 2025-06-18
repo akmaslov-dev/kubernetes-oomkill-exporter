@@ -1,6 +1,6 @@
 module github.com/sapcc/kubernetes-oomkill-exporter
 
-go 1.24
+go 1.24.4
 
 require (
 	github.com/containerd/containerd v1.7.27
